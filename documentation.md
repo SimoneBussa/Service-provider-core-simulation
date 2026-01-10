@@ -57,8 +57,21 @@ Customer 2 implements a hierarchical IS-IS infrastructure for its internal netwo
 
 - **PC traffic load balancing**: Traffic originating from the customer subnet (10.0.0.0/24) is load-balanced between RT22 and RT23. By default, RT21 identifies both L1/L2 routers as valid exit points for Area 2, distributing traffic across both paths. To prioritize a specific path, the cost of the links connecting RT22/RT23 to RT24 can be adjusted, and Route Leaking can be implemented to propagate specific L2 topology information back into the L1 area (and thus to RT21).
 
-- **CE-PE Connectivity via RIP**: RIP is used to connect PEs and CEs and redistribute routes between the customer and the SP. Concerning internal destinations, RT24 redistributes L2 IS-IS routes into the RIP process. RT24 internal interfaces are set to RIP passive-interface and route map filters are used to ensure that only internal customer routes are advertised to PEs by RT24. This prevents RT24 from propagating RIP routes learned from one PE to the other, thus eliminating the risk of the SP Core using the Customer network as a backup path (which could occur because RIP's Administrative Distance is typically favored over the iBGP). When receiving RIP routes from the CEs, PEs routers (CSR32, XRV9) redistribute them into BGP towards the MPLS core. The PE on the other side of the SP receives BGP routes from the MPLS core, redistribute them into RIP toward the CE, and finally the CE into ISIS as Level 2 routes, to be forwarded to the internal customer network. 
+- **CE-PE Connectivity via RIP**: RIP is used to connect PEs and CEs and redistribute routes between the customer and the SP. Concerning internal destinations, RT24 redistributes L2 IS-IS routes into the RIP process. RT24 internal interfaces are set to RIP passive-interface and route map filters are used to ensure that only internal customer routes are advertised to PEs by RT24. This prevents RT24 from propagating RIP routes learned from one PE to the other, thus eliminating the risk of the SP Core using the Customer network as a backup path (which could occur because RIP's Administrative Distance is typically favored over the iBGP). When receiving RIP routes from the CEs, PEs routers (CSR32, XRV9) redistribute them into MP-BGP towards the MPLS core. The PE on the other side of the SP receives MP-BGP routes from the MPLS core, redistribute them into RIP toward the CE, and finally the CE into ISIS as Level 2 routes, to be forwarded to the internal customer network. 
 
 <p align="center">
   <img src="./images/customer2-network.png" width=700/>
+</p>
+
+
+## Customer 3 Architecture (AS 30)
+
+Customer 3 (AS 30) uses EIGRP for internal routing and connects to the Service Provider via a multihomed eBGP architecture. In this scenario, without specific policies, one CE (e.g., R35) might prefer the path through the MPLS backbone to reach the other CE (e.g., R36) instead of using the direct internal link, creating suboptimal routing and potential loops. This is because, by default, routes learned from the Service Provider via eBGP have an Administrative Distance of 20, which is lower than the AD of 90 for internal EIGRP routes. To mitigate this, the BGP Site-of-Origin (SoO) attribute is implemented on the Provider Edge (PE) routers (CSR32 and XRV9). 
+
+- **Inbound marking**: When the PE receives eBGP updates from its locally attached CE (e.g., CSR32 receiving routes from R36), it tags these prefixes with a specific BGP Extended Community (SoO).
+
+- **Outbound filtering**: Before sending BGP updates to a CE, the PE checks the SoO attribute. If the route carries an SoO value matching the site it is about to be sent to, the PE filters that update. This ensures that R35 never learns R36's prefixes via BGP (and vice versa). As a result, the routers are forced to use their internal EIGRP path for site-to-site communication, while the BGP path remains strictly for external traffic or as a legitimate recovery route.
+
+<p align="center">
+  <img src="./images/customer3-network.png" width=300/>
 </p>
